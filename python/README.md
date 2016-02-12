@@ -1,0 +1,2 @@
+# rinexutils
+Python RINEX utilites
