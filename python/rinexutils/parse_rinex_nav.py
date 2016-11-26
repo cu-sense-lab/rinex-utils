@@ -45,9 +45,9 @@ def parse_rinex_nav(filepath, century=2000):
             year = century + yy
             epoch = datetime(year, month, day, hour, minute, int(second), int(1e6 * (second % 1)), tzinfo=timezone.utc)
             eph = SimpleNamespace(
-                epoch=epoch,
+                epoch=epoch, a0=a0, a1=a1, a2=a2,
                 iode1=iode1, c_rs=c_rs, delta_n=delta_n, m_0=m_0,
-                c_uc=c_uc, e=e, c_us=c_us, sqrt_a=sqrt_a,
+                c_uc=c_uc, e=e, c_us=c_us, sqrt_a=sqrt_a, a=sqrt_a**2,
                 t_oe=t_oe, c_ic=c_ic, omega_0=omega_0, c_is=c_is,
                 i_0=i_0, c_rc=c_rc, omega=omega, omega_dot=omega_dot,  # TODO check if orbit solutions correct omega
                 i_dot=i_dot, l2_codes=l2_codes, week=week, l2p_data=l2p_data,
