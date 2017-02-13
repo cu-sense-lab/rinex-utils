@@ -1,6 +1,8 @@
 import re
 from types import SimpleNamespace
 from datetime import datetime, timezone
+from gnssutils.time import gpsseconds
+from numpy import infty
 
 def parse_rinex_nav(filepath, century=2000):
     '''
@@ -58,3 +60,17 @@ def parse_rinex_nav(filepath, century=2000):
                 data[prn] = []
             data[prn].append(eph)
     return data
+
+def find_best_eph(ephemerides, time):
+    '''
+    Find the best ephemeris from a list `ephemerides`--i.e. the one with time closest to GPS time `time`
+    '''
+    min_dist = infty
+    best_eph = None
+    for eph in ephemerides:
+        gpst = gpsseconds(eph.week, eph.t_oe)
+        dist = abs(gpst - time)
+        if dist < min_dist:
+            min_dist = dist
+            best_eph = eph
+    return best_eph
