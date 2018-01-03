@@ -1,1 +1,0 @@
-from rinexutils.parse_rinex_nav import parse_rinex_nav
