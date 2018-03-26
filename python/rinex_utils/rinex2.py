@@ -4,7 +4,80 @@ from numpy import array, nan, datetime64
 from datetime import datetime
 import re
 
-def parse_rinex_header(lines):
+# RINEX 2.10 - 2.11
+CONSTELLATION_IDS = {
+    'G': 'GPS',
+    'R': 'GLONASS',
+    'E': 'Galileo',
+    'S': 'SBAS',
+}
+# RINEX version 2 does not distinguish tracking modes (added in RINEX V3)
+# As such, for GPS, simple signal names L1, L2, L5 are used
+OBSERVATION_DATATYPES = {
+    'GPS': {
+        'C1': {'signal': 'L1', 'name': 'pseudorange'},
+        'P1': {'signal': 'L1', 'name': 'pseudorange'},
+        'L1': {'signal': 'L1', 'name': 'carrier'},
+        'D1': {'signal': 'L1', 'name': 'doppler'},
+        'S1': {'signal': 'L1', 'name': 'snr'},
+        'C2': {'signal': 'L2', 'name': 'pseudorange'},
+        'P2': {'signal': 'L2', 'name': 'pseudorange'},
+        'L2': {'signal': 'L2', 'name': 'carrier'},
+        'D2': {'signal': 'L2', 'name': 'doppler'},
+        'S2': {'signal': 'L2', 'name': 'snr'},
+        'C5': {'signal': 'L5', 'name': 'pseudorange'},
+        'P5': {'signal': 'L5', 'name': 'pseudorange'},
+        'L5': {'signal': 'L5', 'name': 'carrier'},
+        'D5': {'signal': 'L5', 'name': 'doppler'},
+        'S5': {'signal': 'L5', 'name': 'snr'},
+    },
+    'GLONASS': {
+        'C1': {'signal': 'L1', 'name': 'pseudorange'},
+        'P1': {'signal': 'L1', 'name': 'pseudorange'},
+        'L1': {'signal': 'L1', 'name': 'carrier'},
+        'D1': {'signal': 'L1', 'name': 'doppler'},
+        'S1': {'signal': 'L1', 'name': 'snr'},
+        'C2': {'signal': 'L2', 'name': 'pseudorange'},
+        'P2': {'signal': 'L2', 'name': 'pseudorange'},
+        'L2': {'signal': 'L2', 'name': 'carrier'},
+        'D2': {'signal': 'L2', 'name': 'doppler'},
+        'S2': {'signal': 'L2', 'name': 'snr'},
+    },
+    'Galileo': {
+        'C1': {'signal': 'E1', 'name': 'pseudorange'},
+        'L1': {'signal': 'E1', 'name': 'carrier'},
+        'D1': {'signal': 'E1', 'name': 'doppler'},
+        'S1': {'signal': 'E1', 'name': 'snr'},
+        'C5': {'signal': 'E5a', 'name': 'pseudorange'},
+        'L5': {'signal': 'E5a', 'name': 'carrier'},
+        'D5': {'signal': 'E5a', 'name': 'doppler'},
+        'S5': {'signal': 'E5a', 'name': 'snr'},
+        'C7': {'signal': 'E5b', 'name': 'pseudorange'},
+        'L7': {'signal': 'E5b', 'name': 'carrier'},
+        'D7': {'signal': 'E5b', 'name': 'doppler'},
+        'S7': {'signal': 'E5b', 'name': 'snr'},
+        'C8': {'signal': 'E5ab', 'name': 'pseudorange'},
+        'L8': {'signal': 'E5ab', 'name': 'carrier'},
+        'D8': {'signal': 'E5ab', 'name': 'doppler'},
+        'S8': {'signal': 'E5ab', 'name': 'snr'},
+        'C6': {'signal': 'E6', 'name': 'pseudorange'},
+        'L6': {'signal': 'E6', 'name': 'carrier'},
+        'D6': {'signal': 'E6', 'name': 'doppler'},
+        'S6': {'signal': 'E6', 'name': 'snr'},
+    },
+    'SBAS': {
+        'C1': {'signal': 'L1', 'name': 'pseudorange'},
+        'L1': {'signal': 'L1', 'name': 'carrier'},
+        'D1': {'signal': 'L1', 'name': 'doppler'},
+        'S1': {'signal': 'L1', 'name': 'snr'},
+        'C5': {'signal': 'L5', 'name': 'pseudorange'},
+        'L5': {'signal': 'L5', 'name': 'carrier'},
+        'D5': {'signal': 'L5', 'name': 'doppler'},
+        'S5': {'signal': 'L5', 'name': 'snr'},
+    },
+}
+
+def parse_RINEX2_header(lines):
     '''
     Given list of lines corresponding to the header of a RINEX file, parses
     the header of the file and returns a namespace containing the header information.
@@ -56,8 +129,11 @@ def parse_rinex_header(lines):
             elif line[60:].strip() == 'TIME OF FIRST OBS':
                 header.time_of_first_obs = line[:60].strip()
             elif line[60:].strip() == '# / TYPES OF OBSERV':
-                header.n_obs = int(line[:10])
-                header.obs_types = line[10:58].split()
+                n_obs_str = line[:10].strip()
+                if n_obs_str:
+                    header.n_obs = int(n_obs_str)
+                    header.obs_types = []
+                header.obs_types += line[10:60].split()
             elif line[60:].strip() == 'COMMENT':
                 pass
     except StopIteration:
@@ -65,70 +141,7 @@ def parse_rinex_header(lines):
     return header
 
 
-def parse_nav_data(lines, century=2000):
-    '''
-    Given filepath to RINEX Navigation file, parses navigation into ephemeris.
-    Returns dictionary {prn: [SimpleNamespace]} of ephemeris objects
-    
-    Output
-    ------
-    Dictionary of format:
-        {<prn>: <namespace>}
-    Each namespace contains the following parameters:
-        epoch - Python `datetime` object that is the epoch corresponding to the
-            ephemeris -- this is also the "Time of Clock" (`t_oc`)
-        e - eccentricity
-        t_oe - time of ephemeris
-        i_0 - inclination at reference time (rad)
-        a - semi-major axis (m); usually given as SQRT
-        omega_dot - rate of right ascension (rad/s)
-        omega_0 - right ascension at week (rad)
-        omega - argument of perigee
-        M_0 - mean anomaly of reference time (rad)
-        week - GPS week number
-        delta_n - mean motion difference (rad/s)
-        i_dot - rate of inclination angle (rad/s)
-        c_us - argument of latitude (amplitude of cosine, radians)
-        c_rs - orbit radius (amplitude of sine, meters)
-        c_is - inclination (amplitude of sine, meters)
-        c_uc - argument of latitude (amplitude of cosine, radians)
-        c_rc - orbit radius (amplitude of cosine, meters)
-        c_ic - inclination (amplitude of cosine, meters)
-    '''
-    epoch_pattern = '(\s?\d+)\s(\s?\d+)\s(\s?\d+)\s(\s?\d+)\s(\s?\d+)\s(\s?\d+)\s(\s?\d+\.\d)'
-    number_pattern = '\n?\s*([+-]?\d+\.\d{12}D[+-]?\d{2})'
-    pattern = epoch_pattern + 29 * number_pattern
-    data = {}
-    matches = re.findall(pattern, '\n'.join(lines))
-    for m in matches:
-        prn, yy, month, day, hour, minute = (int(i) for i in m[:6])
-        second, a0, a1, a2, \
-            iode1, c_rs, delta_n, m_0, \
-            c_uc, e, c_us, sqrt_a, \
-            t_oe, c_ic, omega_0, c_is, \
-            i_0, c_rc, omega, omega_dot, \
-            i_dot, l2_codes, week, l2p_data, \
-            accuracy, health, tgd, iodc, \
-            transmit_time, fit_interval = (float(s.replace('D', 'E')) for s in m[6:36])
-        year = century + yy
-        epoch = datetime64(datetime(year, month, day, hour, minute, int(second), int(1e6 * (second % 1))))
-        eph = SimpleNamespace(
-            epoch=epoch, a0=a0, a1=a1, a2=a2,
-            iode1=iode1, c_rs=c_rs, delta_n=delta_n, m_0=m_0,
-            c_uc=c_uc, e=e, c_us=c_us, sqrt_a=sqrt_a,
-            t_oe=t_oe, c_ic=c_ic, omega_0=omega_0, c_is=c_is,
-            i_0=i_0, c_rc=c_rc, omega=omega, omega_dot=omega_dot,  # TODO check if orbit solutions correct omega
-            i_dot=i_dot, l2_codes=l2_codes, week=week, l2p_data=l2p_data,
-            accuracy=accuracy, health=health, tgd=tgd, iodc=iodc,
-            transmit_time=transmit_time, fit_interval=fit_interval
-        )
-        if prn not in data.keys():
-            data[prn] = []
-        data[prn].append(eph)
-    return data
-
-
-def parse_obs_data(lines, observations, century=2000, return_time=False):
+def parse_RINEX2_obs_data(lines, observations, century=2000, return_time=False):
     '''
     Given `lines` corresponding to the RINEX observation file data (non-header) lines,
     and a list of the types of observations recorded at each epoch, produces a dictionary
@@ -155,7 +168,7 @@ def parse_obs_data(lines, observations, century=2000, return_time=False):
             # of the measurement epoch are specified, along with the number and ids of
             # the satellites whose measurements are given
             line = next(lines)
-            yy = int(line[:4])
+            yy = int(line[:4].strip())
             year = century + yy
             month = int(line[4:7])
             day = int(line[7:10])
@@ -170,19 +183,23 @@ def parse_obs_data(lines, observations, century=2000, return_time=False):
             num_sats = int(line[29:32])
             # there is space for (80 - 32) / 3 = 16 satellite ids
             # if there are more than 16, then they continue on the next line
-            line = line[32:]
-            if num_sats > 16:
-                line = (line + next(lines).strip()).replace(' ', '')
-            line = line.strip()
-            # must replace spaces with zeros: e.g. to convert `'G 1'` to `'G01'`
-            sat_ids = [line[3*i:3*(i+1)].replace(' ', '0') for i in range(num_sats)]
-
+            # a general approach is to consume lines until we have determined all sat IDs
+            sat_ids = []
+            line = line[32:].strip()
+            while len(sat_ids) < num_sats:
+                sat_ids.append(line[:3].replace(' ', '0'))
+                line = line[3:]
+                if line == '' and len(sat_ids) < num_sats:
+                    line = next(lines)
+                    assert(line[:32].strip() == '')
+                    line = line.strip()
+                    assert(len(line) % 3 == 0)  # sanity check -- each sat ID takes 3 chars
             for sat_id in sat_ids:
                 # create new entry if `sat_id` is new
                 if sat_id not in data.keys():
                     data[sat_id] = {'index': [], 'time': []}
-                    for obs_id in observations:
-                        data[sat_id][obs_id] = []
+#                     for obs_id in observations:
+#                         data[sat_id][obs_id] = []
                 # append time/index first, then append obs values
                 data[sat_id]['time'].append(dt)
                 data[sat_id]['index'].append(epoch_index)
@@ -190,14 +207,25 @@ def parse_obs_data(lines, observations, century=2000, return_time=False):
                 # each entry is of width 16, starting at index 0
                 num_lines_per_sat = 1 + len(observations) // 5
                 line = ''
-                while num_lines_per_sat > 0:
-                    line += next(lines).replace('\n', '')
-                    num_lines_per_sat -= 1
+                for i in range(num_lines_per_sat):
+                    line += next(lines).replace('\n', '').ljust(80)
                 for i, obs_id in enumerate(observations):
+                    val_str = line[16 * i:16 * (i + 1)].strip()
+                    if val_str == '':
+                        continue
+                    val_str = val_str.split()
+                    if len(val_str) == 1:
+                        val_str = val_str[0]
+                    elif len(val_str) == 2:
+                        val_str, sig_flag = val_str
+                    else:
+                        assert(False)  # error
                     try:
-                        val = float(line[16 * i:16 * (i + 1)])
+                        val = float(val_str)
                     except Exception:
                         val = nan
+                    if obs_id not in data[sat_id].keys():
+                        data[sat_id][obs_id] = []
                     data[sat_id][obs_id].append(val)
             epoch_index += 1
     except StopIteration:
@@ -206,7 +234,7 @@ def parse_obs_data(lines, observations, century=2000, return_time=False):
         return data, array(time)
     return data
 
-def transform_values_from_rinex_obs(rinex_data):
+def transform_values_from_RINEX2_obs(rinex_data):
     '''
     Transforms output from `parse_obs` to more useful format.
     
@@ -223,23 +251,12 @@ def transform_values_from_rinex_obs(rinex_data):
         signal namespace contains arrays of any measurements for that 
         corresponding signal.
     '''
-    rinex_obs_datatypes_mapping = {
-        'C1': {'signal': 'L1', 'name': 'pr'},
-        'L1': {'signal': 'L1', 'name': 'carrier'},
-        'D1': {'signal': 'L1', 'name': 'doppler'},
-        'S1': {'signal': 'L1', 'name': 'snr'},
-        'C2': {'signal': 'L2', 'name': 'pr'},
-        'P2': {'signal': 'L2', 'name': 'pr'},
-        'L2': {'signal': 'L2', 'name': 'carrier'},
-        'D2': {'signal': 'L2', 'name': 'doppler'},
-        'S2': {'signal': 'L2', 'name': 'snr'},
-    }
     data = {}
     for sat_id, rnx_sat in rinex_data.items():
         if sat_id not in data.keys():
             data[sat_id] = SimpleNamespace(signals={})
         sat = data[sat_id]
-        for obs_name, mapping in rinex_obs_datatypes_mapping.items():
+        for obs_name, mapping in OBSERVATION_DATATYPES.items():
             if obs_name in rnx_sat.keys():
                 signal = mapping['signal']
                 if signal not in sat.signals.keys():
@@ -251,7 +268,7 @@ def transform_values_from_rinex_obs(rinex_data):
             sat.index = array(rnx_sat['index'])
     return data
 
-def parse_rinex_obs_file(filepath, return_time=False):
+def parse_RINEX2_obs_file(filepath, return_time=False):
     '''Given the filepath to a RINEX observation file, parses and returns header
     and observation data.
     
@@ -276,41 +293,11 @@ def parse_rinex_obs_file(filepath, return_time=False):
             break
     header_lines = lines[:i + 1]
     obs_lines = lines[i + 1:]
-    header = parse_rinex_header(header_lines)
+    header = parse_RINEX2_header(header_lines)
     if not hasattr(header, 'obs_types'):
-        raise Exception('RINEX header must contain `# / TYPES OF OBS.` and `header` namespace from `parse_rinex_header` must contain corresponding list `obs_types`')
-    obs_data, obs_time = parse_obs_data(obs_lines, header.obs_types, return_time=True)
-    obs_data = transform_values_from_rinex_obs(obs_data)
+        raise Exception('RINEX header must contain `# / TYPES OF OBS.` and `header` namespace from `parse_parse_RINEX2_header` must contain corresponding list `obs_types`')
+    obs_data, obs_time = parse_RINEX2_obs_data(obs_lines, header.obs_types, return_time=True)
+    obs_data = transform_values_from_RINEX2_obs(obs_data)
     if return_time:
         return header, obs_data, obs_time
     return header, obs_data
-
-def parse_rinex_nav_file(filepath):
-    '''Given the filepath to a RINEX navigation message file, parses and returns header
-    and navigation ephemeris data.
-    
-    Input
-    -----
-    `filepath` -- filepath to RINEX navigation file
-    
-    Output
-    ------
-    `header, nav_data` where `header` is a namespace containing the parsed header information
-        and `nav_data` is a dictionary containing the navigation data in the format:
-        {<prn>: [<namespace>, ... ]})}
-    
-    where each namespace corresponds to a different ephemeris set.  See documentation in
-    `parse_nav_data` for information on the contents of each namespace.
-        
-    Note: `epoch` on the satellite namespace is a `datetime` object
-    '''
-    with open(filepath, 'r') as f:
-        lines = list(f.readlines())
-    for i, line in enumerate(lines):
-        if line.find('END OF HEADER') >= 0:
-            break
-    header_lines = lines[:i + 1]
-    nav_lines = lines[i + 1:]
-    header = parse_rinex_header(header_lines)
-    nav_data = parse_nav_data(nav_lines)
-    return header, nav_data
