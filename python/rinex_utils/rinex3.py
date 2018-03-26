@@ -1,8 +1,6 @@
-from types import SimpleNamespace
 import numpy
 from numpy import array, nan, datetime64
 from datetime import datetime
-import re
 
 # RINEX 3.03
 CONSTELLATION_IDS = {
@@ -78,8 +76,8 @@ OBSERVATION_DATATYPES = {
 def parse_RINEX3_header(lines):
     '''
     ------------------------------------------------------------
-    Given list of lines corresponding to the header of a RINEX 2
-    file, parses the header of the file and returns a namespace
+    Given list of lines corresponding to the header of a RINEX 3
+    file, parses the header of the file and returns a dictionary
     containing the header information.
     
     Input
@@ -88,77 +86,77 @@ def parse_RINEX3_header(lines):
     
     Output
     ------
-    namespace containing RINEX header information
+    dictionary containing RINEX header information
     '''
-    header = SimpleNamespace()
-    header.system_obs_types = {}
-    header.comments = []
+    header = {}
+    header['system_obs_types'] = {}
+    header['comments'] = []
     lines = iter(lines)
     try:
         while True:
             line = next(lines)
             header_label = line[60:].strip()
             if header_label == 'COMMENT':
-                header.comments.append(line[0:60])
+                header['comments'].append(line[0:60])
             elif header_label == 'RINEX VERSION / TYPE':
-                header.format_version = line[0:20].strip()
-                header.observation_type = line[20:40].strip()
-                header.sat_systems = line[40:60].strip()
+                header['format_version'] = line[0:20].strip()
+                header['observation_type'] = line[20:40].strip()
+                header['sat_systems'] = line[40:60].strip()
             elif header_label == 'PGM / RUN BY / DATE':
-                header.file_creation_program = line[0:20].strip()
-                header.file_creation_agency = line[20:40].strip()
-                header.file_creation_epoch = datetime.strptime(line[40:55].strip(), '%Y%m%d %H%M%S')
+                header['file_creation_program'] = line[0:20].strip()
+                header['file_creation_agency'] = line[20:40].strip()
+                header['file_creation_epoch'] = datetime.strptime(line[40:55].strip(), '%Y%m%d %H%M%S')
             elif header_label == 'MARKER NAME':
-                header.marker_name = line[0:60].strip()
+                header['marker_name'] = line[0:60].strip()
             elif header_label == 'MARKER NUMBER':
-                header.marker_number = line[0:60].strip()
+                header['marker_number'] = line[0:60].strip()
             elif header_label == 'OBSERVER / AGENCY':
-                header.observer = line[0:20].strip()
-                header.agency = line[20:60].strip()
+                header['observer'] = line[0:20].strip()
+                header['agency'] = line[20:60].strip()
             elif header_label == 'REC # / TYPE / VERS':
-                header.receiver_number = line[0:20].strip()
-                header.receiver_type = line[20:40].strip()
-                header.receiver_version = line[40:60].strip()
+                header['receiver_number'] = line[0:20].strip()
+                header['receiver_type'] = line[20:40].strip()
+                header['receiver_version'] = line[40:60].strip()
             elif header_label == 'ANT # / TYPE':
-                header.antenna_number = line[0:20].strip()
-                header.antenna_type = line[20:40].strip()
+                header['antenna_number'] = line[0:20].strip()
+                header['antenna_type'] = line[20:40].strip()
             elif header_label == 'APPROX POSITION XYZ':
-                header.approx_position_xyz = \
+                header['approx_position_xyz'] = \
                     (float(line[0:14]), float(line[14:28]), float(line[28:42]))
             elif header_label == 'SYS / # / OBS TYPES':
                 system_letter = line[0:3].strip()
                 number_of_obs = int(line[3:6])
                 obs = line[6:60].split()
-                if system_letter not in header.system_obs_types.keys():
-                    header.system_obs_types[system_letter] = []
-                header.system_obs_types[system_letter] += obs
+                if system_letter not in header['system_obs_types'].keys():
+                    header['system_obs_types'][system_letter] = []
+                header['system_obs_types'][system_letter] += obs
                 number_of_obs -= len(obs)
                 # Use continuation line(s) for more than 13 observation descriptors
                 while number_of_obs > 0:
                     line = next(lines)
                     assert(line[60:].strip() == 'SYS / # / OBS TYPES')
                     obs = line[6:60].split()
-                    header.system_obs_types[system_letter] += obs
+                    header['system_obs_types'][system_letter] += obs
                     number_of_obs -= len(obs)
             elif header_label == 'SIGNAL STRENGTH UNIT':
-                header.signal_strength_unit = line[0:60].strip()
+                header['signal_strength_unit'] = line[0:60].strip()
             elif header_label == 'INTERVAL':
-                header.interval = float(line[0:60].strip())
+                header['interval'] = float(line[0:60].strip())
             elif header_label == 'TIME OF FIRST OBS':
-                header.time_of_first_obs = line[0:60].strip()
+                header['time_of_first_obs'] = line[0:60].strip()
             elif header_label == 'TIME OF LAST OBS':
-                header.time_of_last_obs = line[0:60].strip()
+                header['time_of_last_obs'] = line[0:60].strip()
             elif header_label == 'RCV CLOCK OFFS APPL':
-                header.rcv_clock_offs_appl = line[0:60].strip()
+                header['rcv_clock_offs_appl'] = line[0:60].strip()
             elif header_label == 'SYS / PHASE SHIFT':
                 if not hasattr(header, 'phase_shifts'):
-                    header.phase_shifts = {}
+                    header['phase_shifts'] = {}
                 system_letter = line[0:1]
-                if system_letter not in header.phase_shifts.keys():
-                    header.phase_shifts[system_letter] = {}
+                if system_letter not in header['phase_shifts'].keys():
+                    header['phase_shifts'][system_letter] = {}
                 signal_id = line[2:5]
                 shift = float(line[6:15])
-                header.phase_shifts[system_letter][signal_id] = shift
+                header['phase_shifts'][system_letter][signal_id] = shift
             elif header_label == 'GLONASS SLOT / FRQ #':
                 pass
             elif header_label == 'LEAP_SECONDS':
@@ -167,24 +165,27 @@ def parse_RINEX3_header(lines):
         pass
     return header
 
-def parse_RINEX3_obs(lines, system_obs_types):
+def parse_RINEX3_obs_data(lines, system_obs_types):
     '''
     ------------------------------------------------------------
-    Given list of lines corresponding to the observations of a
-    RINEX 3 file, parses the observation epochs and returns a 
-    namespace containing the observations for each epoch.
+    Given `lines` corresponding to the RINEX observation file
+    data (non-header) lines, and a list of the types of
+    observations recorded at each epoch, produces a dictionary
+    containing the observation time and values for each
+    satellite.
     
     Input
     -----
-    `lines` -- lines corresponding to RINEX 3 observation epochs
-    `header` -- namespace containing RINEX 3 file header
-        information (see `parse_RINEX3_header`)
+    `lines` -- data lines from RINEX observation file
+    `system_obs_types` -- list of the observations reported at
+        each epoch
     
     Output
     ------
-    namespace containing RINEX 3 observations
+    `data` -- dictionary of format:
+        {<sat_id>: {'index': [<int...>], <obs_id>: [<values...>]}}
+    `time` -- list of times (datetime64) corresponding to epochs
     '''
-    
     lines = iter(lines)
     epoch_index = 0
     data = {}  # <sat_id>: {'index': [<5, 6, ...>], <obs_id>: [<values...>]}
@@ -237,12 +238,30 @@ def parse_RINEX3_obs(lines, system_obs_types):
 
 def transform_values_from_RINEX3_obs(data):
     '''
-    --------------------------------------------------------
-    Given the data dict parsed from RINEX 3 observation
-    file, converts data to format:
-        {<sat_id>: {<signal_id>: {<obs_id>: ndarray}}}
+    ------------------------------------------------------------
+    Transforms output from `parse_RINEX3_obs_data` to more
+    useful format.
     
-    Returns converted data dict.
+    Input:
+    -------
+    `rinex_data` -- Python dictionary with format:
+        {
+            <sat_id>: {
+                    'index': [<int>,...],
+                    <obs_id>: [<values...>]
+                }
+        }
+        
+    Output:
+    -------
+    `data` -- dictionary in format:
+        {<sat_id>: {
+                'index': ndarray,
+                <sig_id>: {
+                    <obs_name>: ndarray
+                }
+            }
+        }
     '''
     new_data = {}
     for sat_id in data.keys():
@@ -252,7 +271,7 @@ def transform_values_from_RINEX3_obs(data):
         obs_datatypes = OBSERVATION_DATATYPES[constellation]
         for obs_id in data[sat_id].keys():
             if obs_id == 'index':
-                new_data[sat_id]['index'] = array(data[sat_id]['index'])
+                new_data[sat_id]['index'] = array(data[sat_id]['index'], dtype=int)
                 continue
             val_arr = array(data[sat_id][obs_id])
             if numpy.all(numpy.isnan(val_arr)):
@@ -266,9 +285,9 @@ def transform_values_from_RINEX3_obs(data):
 
 def parse_RINEX3_obs_file(filepath):
     '''
-    --------------------------------------------------------
-    Given the filepath to a RINEX 3 observation file, parses
-    and returns header and observation data.
+    ------------------------------------------------------------
+    Given the filepath to a RINEX observation file, parses and
+    returns header and observation data.
     
     Input
     -----
@@ -276,16 +295,22 @@ def parse_RINEX3_obs_file(filepath):
 
     Output
     ------
-    `header, obs_data, (obs_time)` where `header` is a
-        namespace containing the parsed header information
-        and `obs_data` is a namespace containing the
-        observation data in the format:
-            data.observations = {
-                <sat_id>: namespace(index=ndarray, signals={
-                                <sig_id>: namespace(<obs_name>=ndarray)}
-                            )
-                },
-            data.time = ndarray
+    `header, observations` where `header` is a dictionary
+    containing the parsed header information and `observations`
+    is a dictionary containing the observation data in the
+    format:
+        
+        {
+            'time': ndarray,
+            'satellites': {
+                <sat_id>: {
+                    'index': ndarray,
+                    <obs_id>: ndarray
+                }
+            }
+        }
+        
+    Note: `time` in `observations` is in GPST seconds
     '''
     with open(filepath, 'r') as f:
         lines = list(f.readlines())
@@ -295,10 +320,11 @@ def parse_RINEX3_obs_file(filepath):
     header_lines = lines[:i + 1]
     obs_lines = lines[i + 1:]
     header = parse_RINEX3_header(header_lines)
-    if not hasattr(header, 'system_obs_types'):
-        raise Exception('RINEX header must contain `SYS / # / OBS TYPES` and `header` namespace from `parse_RINEX3_header` must contain corresponding dictionary `system_obs_types`')
-    obs_data, time = parse_RINEX3_obs(obs_lines, header.system_obs_types)
+    if 'system_obs_types' not in header.keys():
+        raise Exception('RINEX header must contain `SYS / # / OBS TYPES` and `header` dict from `parse_RINEX3_header` must contain corresponding dictionary `system_obs_types`')
+    obs_data, time = parse_RINEX3_obs_data(obs_lines, header['system_obs_types'])
     obs_data = transform_values_from_RINEX3_obs(obs_data)
+    gps_epoch = datetime64(datetime(1980, 1, 6))
+    time = (array(time) - gps_epoch).astype(float) / 1e6  # dt64 is in microseconds
     observations = {'time': time, 'satellites': obs_data}
-    return header, obs_data
-
+    return header, observations
