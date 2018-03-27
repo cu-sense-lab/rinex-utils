@@ -1,77 +1,220 @@
+# %load /home/breitsbw/projects/utilities/rinex-utils/python/rinex_utils/rinex3.py
 import numpy
 from numpy import array, nan, datetime64
 from datetime import datetime
 
 # RINEX 3.03
-CONSTELLATION_IDS = {
+CONSTELLATION_LETTERS = {
     'G': 'GPS',
     'R': 'GLONASS',
     'E': 'Galileo',
+    'J': 'QZSS',
+    'C': 'BDS',  # Beidou
+    'I': 'IRNSS',
     'S': 'SBAS',
 }
-OBSERVATION_DATATYPES = {
+OBSERVATION_LETTERS = {
+    'C': 'pseudorange',
+    'L': 'carrier',
+    'D': 'doppler',
+    'S': 'cnr',
+}
+BAND_AND_CHANNEL_MAPPINGS = {
     'GPS': {
-        'C1': {'signal': 'L1', 'name': 'pseudorange'},
-        'P1': {'signal': 'L1', 'name': 'pseudorange'},
-        'L1': {'signal': 'L1', 'name': 'carrier'},
-        'D1': {'signal': 'L1', 'name': 'doppler'},
-        'S1': {'signal': 'L1', 'name': 'snr'},
-        'C2': {'signal': 'L2', 'name': 'pseudorange'},
-        'P2': {'signal': 'L2', 'name': 'pseudorange'},
-        'L2': {'signal': 'L2', 'name': 'carrier'},
-        'D2': {'signal': 'L2', 'name': 'doppler'},
-        'S2': {'signal': 'L2', 'name': 'snr'},
-        'C5': {'signal': 'L5', 'name': 'pseudorange'},
-        'P5': {'signal': 'L5', 'name': 'pseudorange'},
-        'L5': {'signal': 'L5', 'name': 'carrier'},
-        'D5': {'signal': 'L5', 'name': 'doppler'},
-        'S5': {'signal': 'L5', 'name': 'snr'},
+        '1' : {'band':'L1', 'frequency':1575.42,
+             'channel_ids':{
+                 'C': 'C/A',
+                 'S': 'L1C(D)',
+                 'L': 'L1C(P)',
+                 'X': 'L1C (D+P)',
+                 'P': 'P (AS off)',
+                 'W': 'Z-tracking and similar(AS on)',
+                 'Y': 'Y',
+                 'M': 'M',
+                 'N': 'codeless'
+             }
+            },
+        '2' : {'band':'L2', 'frequency':1227.60,
+                'channel_ids':{
+                    'C':'C/A',
+                    'D':'L1(C/A)+(P2-P1)(semi-codeless)',
+                    'S':'L2C (M)',
+                    'L':'L2C (L)',
+                    'X':'L2C (M+L)',
+                    'P':'P (AS off)',
+                    'W':'Z-tracking and similar(AS on)',
+                    'Y':'Y',
+                    'M':'M',
+                    'N':'codeless'
+                }
+              },
+         '5' : {'band':'L5', 'frequency':1176.45,
+                'channel_ids':{
+                    'I': 'I',
+                    'Q': 'Q',
+                    'X': 'I+Q'
+                }
+               }
     },
-    'GLONASS': {
-        'C1': {'signal': 'L1', 'name': 'pseudorange'},
-        'P1': {'signal': 'L1', 'name': 'pseudorange'},
-        'L1': {'signal': 'L1', 'name': 'carrier'},
-        'D1': {'signal': 'L1', 'name': 'doppler'},
-        'S1': {'signal': 'L1', 'name': 'snr'},
-        'C2': {'signal': 'L2', 'name': 'pseudorange'},
-        'P2': {'signal': 'L2', 'name': 'pseudorange'},
-        'L2': {'signal': 'L2', 'name': 'carrier'},
-        'D2': {'signal': 'L2', 'name': 'doppler'},
-        'S2': {'signal': 'L2', 'name': 'snr'},
+    'GLONASS':{
+        '1' : {'band':'G1', 'frequency':lambda k: 1602+k*(9/16),
+                 'channel_ids':{
+                     'C': 'C/A',
+                     'P': 'P'
+                 }
+              },
+        '2' : {'band':'G2', 'frequency':lambda k: 1246+k*716,
+             'channel_ids':{
+                 'C': 'C/A(GLONASS M)',
+                 'P': 'P'
+             }
+            },
+        '3' : {'band':'G3', 'frequency':1202.025,
+             'channel_ids':{
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q'
+             }
+            }
     },
-    'Galileo': {
-        'C1': {'signal': 'E1', 'name': 'pseudorange'},
-        'L1': {'signal': 'E1', 'name': 'carrier'},
-        'D1': {'signal': 'E1', 'name': 'doppler'},
-        'S1': {'signal': 'E1', 'name': 'snr'},
-        'C5': {'signal': 'E5a', 'name': 'pseudorange'},
-        'L5': {'signal': 'E5a', 'name': 'carrier'},
-        'D5': {'signal': 'E5a', 'name': 'doppler'},
-        'S5': {'signal': 'E5a', 'name': 'snr'},
-        'C7': {'signal': 'E5b', 'name': 'pseudorange'},
-        'L7': {'signal': 'E5b', 'name': 'carrier'},
-        'D7': {'signal': 'E5b', 'name': 'doppler'},
-        'S7': {'signal': 'E5b', 'name': 'snr'},
-        'C8': {'signal': 'E5ab', 'name': 'pseudorange'},
-        'L8': {'signal': 'E5ab', 'name': 'carrier'},
-        'D8': {'signal': 'E5ab', 'name': 'doppler'},
-        'S8': {'signal': 'E5ab', 'name': 'snr'},
-        'C6': {'signal': 'E6', 'name': 'pseudorange'},
-        'L6': {'signal': 'E6', 'name': 'carrier'},
-        'D6': {'signal': 'E6', 'name': 'doppler'},
-        'S6': {'signal': 'E6', 'name': 'snr'},
+    'BDS':{
+        '2': {'band':'B1', 'frequency':1561.098,
+                'channel_ids':{
+                'I': 'I',
+                'Q': 'Q',
+                'X': 'I+Q'
+               }
+              },
+        '7': {'band':'B2', 'frequency':1207.14,
+               'channel_ids':{
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q'
+               }
+              },
+        '6': {'band':'B3', 'frequency': 1268.52,
+                'channel_ids':{
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q'
+                }
+            },
+    },
+     'Galileo': {
+        '1': {'band': 'E1', 'frequency': 1575.42,
+             'channel_ids': {
+                 'A': 'A PRS',
+                 'B': 'B I/NAV OS/CS/SoL',
+                 'C': 'C no data',
+                 'X': 'B+C',
+                 'Z': 'A+B+C',
+             }
+            },
+        '5': {'band': 'E5a', 'frequency': 1176.45,
+             'channel_ids': {
+                 'I': 'I F/NAV OS',
+                 'Q': 'Q no data',
+                 'X': 'I+Q'
+             }
+            },
+        '7': {'band': 'E5b', 'frequency': 1207.140,
+             'channel_ids': {
+                 'I': 'I F/NAV OS/CS/SoL',
+                 'Q': 'Q no data',
+                 'X': 'I+Q'
+             }
+            },
+        '8': {'band': 'E5', 'frequency': 1191.795,
+             'channel_ids': {
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q'
+             }
+            },
+        '6': {'band': 'E6', 'frequency': 1278.75,
+             'channel_ids': {
+                 'A': 'A PRS',
+                 'B': 'B C/NAV CS',
+                 'C': 'C no data',
+                 'X': 'B+C',
+                 'Z': 'A+B+C'
+             }
+            },
     },
     'SBAS': {
-        'C1': {'signal': 'L1', 'name': 'pseudorange'},
-        'L1': {'signal': 'L1', 'name': 'carrier'},
-        'D1': {'signal': 'L1', 'name': 'doppler'},
-        'S1': {'signal': 'L1', 'name': 'snr'},
-        'C5': {'signal': 'L5', 'name': 'pseudorange'},
-        'L5': {'signal': 'L5', 'name': 'carrier'},
-        'D5': {'signal': 'L5', 'name': 'doppler'},
-        'S5': {'signal': 'L5', 'name': 'snr'},
+        '1': {'band': 'L1', 'frequency': 1575.42,
+             'channel_ids': {
+                 'C': 'C/A',
+             }
+            },
+        '5': {'band': 'L5', 'frequency': 1176.45,
+             'channel_ids': {
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q'
+             }
+            },
     },
+    'QZSS': {
+        '1': {'band': 'L1', 'frequency': 1575.42,
+             'channel_ids': {
+                 'C': 'C/A',
+                 'S': 'L1C (D)',
+                 'L': 'L1C (P)',
+                 'X': 'L1C (D+P)',
+                 'D': 'L1-SAIF',
+             }
+            },
+        '2': {'band': 'L2', 'frequency': 1227.60,
+             'channel_ids': {
+                 'S': 'L2C (M)',
+                 'L': 'L2C (L)',
+                 'X': 'L2C (M+L)',
+             }
+            },
+        '5': {'band': 'L5', 'frequency': 1176.45,
+             'channel_ids': {
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q',
+             }
+            },
+        '6': {'band': 'LEX', 'frequency': 1278.75,
+             'channel_ids': {
+                 'S': 'S',
+                 'L': 'L',
+                 'X': 'S+L',
+             }
+            },
+    },
+    'IRNSS': {
+        '5': {'band': 'L5', 'frequency': 1176.45,
+             'channel_ids': {
+                 'A': 'A SPS',
+                 'B': 'B RS (D)',
+                 'C': 'C RS (P)',
+                 'X': 'B+C',
+             }
+            },
+        '9': {'band': 'S', 'frequency': 2492.028,
+             'channel_ids': {
+                 'A': 'A SPS',
+                 'B': 'B RS (D)',
+                 'C': 'C RS (P)',
+             }
+            },
+    }
 }
+
+
+def parse_value(val_str, dtype=float, err_val=nan):
+    val_str = val_str.strip()
+    if val_str == '':
+        return err_val
+    try:
+        return dtype(val_str)
+    except Exception:
+        return err_val
 
 def parse_RINEX3_header(lines):
     '''
@@ -105,7 +248,7 @@ def parse_RINEX3_header(lines):
             elif header_label == 'PGM / RUN BY / DATE':
                 header['file_creation_program'] = line[0:20].strip()
                 header['file_creation_agency'] = line[20:40].strip()
-                header['file_creation_epoch'] = datetime.strptime(line[40:55].strip(), '%Y%m%d %H%M%S')
+                header['file_creation_epoch'] = line[40:55].strip()
             elif header_label == 'MARKER NAME':
                 header['marker_name'] = line[0:60].strip()
             elif header_label == 'MARKER NUMBER':
@@ -125,7 +268,7 @@ def parse_RINEX3_header(lines):
                     (float(line[0:14]), float(line[14:28]), float(line[28:42]))
             elif header_label == 'SYS / # / OBS TYPES':
                 system_letter = line[0:3].strip()
-                number_of_obs = int(line[3:6])
+                number_of_obs = parse_value(line[3:6], int)
                 obs = line[6:60].split()
                 if system_letter not in header['system_obs_types'].keys():
                     header['system_obs_types'][system_letter] = []
@@ -141,7 +284,7 @@ def parse_RINEX3_header(lines):
             elif header_label == 'SIGNAL STRENGTH UNIT':
                 header['signal_strength_unit'] = line[0:60].strip()
             elif header_label == 'INTERVAL':
-                header['interval'] = float(line[0:60].strip())
+                header['interval'] = parse_value(line[0:60].strip())
             elif header_label == 'TIME OF FIRST OBS':
                 header['time_of_first_obs'] = line[0:60].strip()
             elif header_label == 'TIME OF LAST OBS':
@@ -155,10 +298,18 @@ def parse_RINEX3_header(lines):
                 if system_letter not in header['phase_shifts'].keys():
                     header['phase_shifts'][system_letter] = {}
                 signal_id = line[2:5]
-                shift = float(line[6:15])
+                shift = parse_value(line[6:15])
                 header['phase_shifts'][system_letter][signal_id] = shift
             elif header_label == 'GLONASS SLOT / FRQ #':
-                pass
+                num_sats = parse_value(line[0:4], int)
+                header['frequency_numbers'] = {}
+                while num_sats > 0:
+                    sat_ids_and_slots = line[4:60].split()
+                    for i in range(len(sat_ids_and_slots) // 2):
+                        sat_id, val_str = sat_ids_and_slots[2 * i], sat_ids_and_slots[2 * i + 1]
+                        header['frequency_numbers'][sat_id] = parse_value(val_str, int)
+                    num_sats -= len(sat_ids_and_slots) // 2
+                    line = next(lines)
             elif header_label == 'LEAP_SECONDS':
                 pass
     except StopIteration:
@@ -197,18 +348,18 @@ def parse_RINEX3_obs_data(lines, system_obs_types):
             # the satellites whose measurements are given
             line = next(lines)
             assert(line[0] == '>')
-            year = int(line[2:6])
-            month = int(line[7:9])
-            day = int(line[10:12])
-            hour = int(line[13:15])
-            minute = int(line[16:18])
-            seconds = float(line[19:29])
+            year = parse_value(line[2:6], int)
+            month = parse_value(line[7:9], int)
+            day = parse_value(line[10:12], int)
+            hour = parse_value(line[13:15], int)
+            minute = parse_value(line[16:18], int)
+            seconds = parse_value(line[19:29])
             microseconds = int(1e6 * (seconds % 1))
             seconds = int(seconds)
             dt = datetime64(datetime(year, month, day, hour, minute, seconds, microseconds))
             time.append(dt)
-            flag = int(line[30:32])
-            num_sats = int(line[32:35])
+            flag = parse_value(line[30:32], int)
+            num_sats = parse_value(line[32:35], int)
             for i in range(num_sats):
                 line = next(lines)
                 sat_id = line[0:3]
@@ -228,7 +379,7 @@ def parse_RINEX3_obs_data(lines, system_obs_types):
                     obs_val = nan
                     obs_str = line[j * 16:(j + 1) * 16].strip()
                     if obs_str != '':
-                        obs_val = float(obs_str)
+                        obs_val = parse_value(obs_str)
                     data[sat_id][obs_type].append(obs_val)
                 data[sat_id]['index'].append(epoch_index)
             epoch_index += 1
@@ -236,7 +387,7 @@ def parse_RINEX3_obs_data(lines, system_obs_types):
         pass
     return data, time
 
-def transform_values_from_RINEX3_obs(data):
+def transform_values_from_RINEX3_obs(data, frequency_numbers=None):
     '''
     ------------------------------------------------------------
     Transforms output from `parse_RINEX3_obs_data` to more
@@ -251,6 +402,8 @@ def transform_values_from_RINEX3_obs(data):
                     <obs_id>: [<values...>]
                 }
         }
+    `frequency_numbers` -- GLONASS frequency numbers obtained
+        from RINEX header
         
     Output:
     -------
@@ -258,17 +411,22 @@ def transform_values_from_RINEX3_obs(data):
         {<sat_id>: {
                 'index': ndarray,
                 <sig_id>: {
-                    <obs_name>: ndarray
+                    <channel_id>: {
+                        <obs_name>: ndarray
+                    }
                 }
             }
         }
+        
+    Note: the third character of RINEX observation ID is
+    used as `channel_id`
     '''
     new_data = {}
     for sat_id in data.keys():
         new_data[sat_id] = {}
         system_letter = sat_id[0]
-        constellation = CONSTELLATION_IDS[system_letter]
-        obs_datatypes = OBSERVATION_DATATYPES[constellation]
+        constellation = CONSTELLATION_LETTERS[system_letter]
+        mapping = BAND_AND_CHANNEL_MAPPINGS[constellation]
         for obs_id in data[sat_id].keys():
             if obs_id == 'index':
                 new_data[sat_id]['index'] = array(data[sat_id]['index'], dtype=int)
@@ -276,11 +434,21 @@ def transform_values_from_RINEX3_obs(data):
             val_arr = array(data[sat_id][obs_id])
             if numpy.all(numpy.isnan(val_arr)):
                 continue
-            obs_type = obs_datatypes[obs_id[:2]]
-            sig_id, obs_name = obs_type['signal'], obs_type['name']
-            if sig_id not in new_data[sat_id].keys():
-                new_data[sat_id][sig_id] = {}
-            new_data[sat_id][sig_id][obs_name] = array(data[sat_id][obs_id])
+            obs_letter, obs_band, obs_channel = obs_id
+            band = mapping[obs_band]['band']
+            frequency = mapping[obs_band]['frequency']  # originally in MHz
+            if constellation == 'GLONASS' and callable(frequency):
+                if sat_id in frequency_numbers.keys():
+                    frequency = frequency(frequency_numbers[sat_id])
+                else:
+                    frequency = nan
+            channel_desc = mapping[obs_band]['channel_ids'][obs_channel]
+            obs_name = OBSERVATION_LETTERS[obs_letter]
+            if band not in new_data[sat_id].keys():
+                new_data[sat_id][band] = {'frequency': frequency}
+            if obs_channel not in new_data[sat_id][band].keys():
+                new_data[sat_id][band][obs_channel] = {'channel_desc': channel_desc}
+            new_data[sat_id][band][obs_channel][obs_name] = array(data[sat_id][obs_id])
     return new_data
 
 def parse_RINEX3_obs_file(filepath):
@@ -323,8 +491,9 @@ def parse_RINEX3_obs_file(filepath):
     if 'system_obs_types' not in header.keys():
         raise Exception('RINEX header must contain `SYS / # / OBS TYPES` and `header` dict from `parse_RINEX3_header` must contain corresponding dictionary `system_obs_types`')
     obs_data, time = parse_RINEX3_obs_data(obs_lines, header['system_obs_types'])
-    obs_data = transform_values_from_RINEX3_obs(obs_data)
+    obs_data = transform_values_from_RINEX3_obs(obs_data, header['frequency_numbers'])
     gps_epoch = datetime64(datetime(1980, 1, 6))
     time = (array(time) - gps_epoch).astype(float) / 1e6  # dt64 is in microseconds
     observations = {'time': time, 'satellites': obs_data}
     return header, observations
+
