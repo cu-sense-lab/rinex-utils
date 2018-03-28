@@ -19,6 +19,7 @@ OBSERVATION_LETTERS = {
     'D': 'doppler',
     'S': 'cnr',
 }
+
 BAND_AND_CHANNEL_MAPPINGS = {
     'GPS': {
         '1' : {'band':'L1', 'frequency':1575.42,
@@ -77,29 +78,6 @@ BAND_AND_CHANNEL_MAPPINGS = {
              }
             }
     },
-    'BDS':{
-        '2': {'band':'B1', 'frequency':1561.098,
-                'channel_ids':{
-                'I': 'I',
-                'Q': 'Q',
-                'X': 'I+Q'
-               }
-              },
-        '7': {'band':'B2', 'frequency':1207.14,
-               'channel_ids':{
-                 'I': 'I',
-                 'Q': 'Q',
-                 'X': 'I+Q'
-               }
-              },
-        '6': {'band':'B3', 'frequency': 1268.52,
-                'channel_ids':{
-                 'I': 'I',
-                 'Q': 'Q',
-                 'X': 'I+Q'
-                }
-            },
-    },
      'Galileo': {
         '1': {'band': 'E1', 'frequency': 1575.42,
              'channel_ids': {
@@ -141,6 +119,37 @@ BAND_AND_CHANNEL_MAPPINGS = {
              }
             },
     },
+    'BDS':{
+        '2': {'band':'B1', 'frequency':1561.098,
+                'channel_ids':{
+                'I': 'I',
+                'Q': 'Q',
+                'X': 'I+Q'
+               }
+              },
+        '7': {'band':'B2', 'frequency':1207.14,
+               'channel_ids':{
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q'
+               }
+              },
+        '6': {'band':'B3', 'frequency': 1268.52,
+                'channel_ids':{
+                 'I': 'I',
+                 'Q': 'Q',
+                 'X': 'I+Q'
+                }
+            },
+        # redundancy to support older RINEX 3.02 versions:
+        '1': {'band':'B1', 'frequency': 1561.098,
+                'channel_ids':{
+                'I': 'I',
+                'Q': 'Q',
+                'X': 'I+Q'
+               }
+              },
+    },
     'SBAS': {
         '1': {'band': 'L1', 'frequency': 1575.42,
              'channel_ids': {
@@ -162,7 +171,7 @@ BAND_AND_CHANNEL_MAPPINGS = {
                  'S': 'L1C (D)',
                  'L': 'L1C (P)',
                  'X': 'L1C (D+P)',
-                 'D': 'L1-SAIF',
+                 'Z': 'L1-SAIF',
              }
             },
         '2': {'band': 'L2', 'frequency': 1227.60,
@@ -206,6 +215,54 @@ BAND_AND_CHANNEL_MAPPINGS = {
     }
 }
 
+PREFERRED_BAND_TRIPLETS = {
+    'GPS': ('L1', 'L2', 'L5'),
+    'GLONASS': ('G1', 'G2', 'G3'),
+    'Galileo': ('E1a', 'E1b', 'E5'),
+    'BDS': ('B1', 'B2', 'B3'),
+    'SBAS': None,
+    'QZSS': ('L1', 'L2', 'L5'),
+    'IRNSS': None
+}
+
+CHANNEL_PREFERENCES = {
+    'GPS': {
+        'L1': ['X', 'L', 'S', 'C', 'P', 'W', 'Y', 'M', 'N'],
+        'L2': ['X', 'L', 'S', 'C', 'Y', 'M', 'D', 'W', 'N'],
+        'L5': ['X', 'Q', 'I']
+    },
+    'GLONASS': {
+        'G1': ['C', 'P'],
+        'G2': ['C', 'P'],
+        'G3': ['X', 'Q', 'I']
+    },
+    'Galileo': {
+        'E1': ['X', 'Z', 'A', 'B', 'C'],
+        'E1a': ['X', 'Q', 'I'],
+        'E1b': ['X', 'Q', 'I'],
+        'E5': ['X', 'Q', 'I'],
+        'E6': ['X', 'Z', 'A', 'B', 'C'],
+    },
+    'BDS': {
+        'B1': ['X', 'Q', 'I'],
+        'B2': ['X', 'Q', 'I'],
+        'B3': ['X', 'Q', 'I'],
+    },
+    'SBAS': {
+        'L1': ['C'],
+        'L5': ['X', 'Q', 'I']
+    },
+    'QZSS': {
+        'L1': ['X', 'L', 'S', 'C', 'Z'],
+        'L2': ['X', 'L', 'S'],
+        'L5': ['X', 'Q', 'I'],
+        'LEX': ['X', 'L', 'S']
+    },
+    'IRNSS': {
+        'L5': ['X', 'A', 'B', 'C'],
+        'S': ['A', 'B', 'C']
+    }
+}
 
 def parse_value(val_str, dtype=float, err_val=nan):
     val_str = val_str.strip()
@@ -265,7 +322,7 @@ def parse_RINEX3_header(lines):
                 header['antenna_type'] = line[20:40].strip()
             elif header_label == 'APPROX POSITION XYZ':
                 header['approx_position_xyz'] = \
-                    (float(line[0:14]), float(line[14:28]), float(line[28:42]))
+                    (parse_value(line[0:14]), parse_value(line[14:28]), parse_value(line[28:42]))
             elif header_label == 'SYS / # / OBS TYPES':
                 system_letter = line[0:3].strip()
                 number_of_obs = parse_value(line[3:6], int)
@@ -438,14 +495,14 @@ def transform_values_from_RINEX3_obs(data, frequency_numbers=None):
             band = mapping[obs_band]['band']
             frequency = mapping[obs_band]['frequency']  # originally in MHz
             if constellation == 'GLONASS' and callable(frequency):
-                if sat_id in frequency_numbers.keys():
+                if frequency_numbers is not None and sat_id in frequency_numbers.keys():
                     frequency = frequency(frequency_numbers[sat_id])
                 else:
                     frequency = nan
             channel_desc = mapping[obs_band]['channel_ids'][obs_channel]
             obs_name = OBSERVATION_LETTERS[obs_letter]
             if band not in new_data[sat_id].keys():
-                new_data[sat_id][band] = {'frequency': frequency}
+                new_data[sat_id][band] = {'frequency': frequency * 1e6}
             if obs_channel not in new_data[sat_id][band].keys():
                 new_data[sat_id][band][obs_channel] = {'channel_desc': channel_desc}
             new_data[sat_id][band][obs_channel][obs_name] = array(data[sat_id][obs_id])
@@ -491,7 +548,10 @@ def parse_RINEX3_obs_file(filepath):
     if 'system_obs_types' not in header.keys():
         raise Exception('RINEX header must contain `SYS / # / OBS TYPES` and `header` dict from `parse_RINEX3_header` must contain corresponding dictionary `system_obs_types`')
     obs_data, time = parse_RINEX3_obs_data(obs_lines, header['system_obs_types'])
-    obs_data = transform_values_from_RINEX3_obs(obs_data, header['frequency_numbers'])
+    if 'frequency_numbers' in header.keys():
+        obs_data = transform_values_from_RINEX3_obs(obs_data, header['frequency_numbers'])
+    else:
+        obs_data = transform_values_from_RINEX3_obs(obs_data)
     gps_epoch = datetime64(datetime(1980, 1, 6))
     time = (array(time) - gps_epoch).astype(float) / 1e6  # dt64 is in microseconds
     observations = {'time': time, 'satellites': obs_data}
