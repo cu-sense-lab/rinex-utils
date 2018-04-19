@@ -218,7 +218,8 @@ BAND_AND_CHANNEL_MAPPINGS = {
 PREFERRED_BAND_TRIPLETS = {
     'GPS': ('L1', 'L2', 'L5'),
     'GLONASS': ('G1', 'G2', 'G3'),
-    'Galileo': ('E1a', 'E1b', 'E5'),
+    #'Galileo': ('E1', 'E5', 'E6'),
+    'Galileo': ('E1', 'E5a', 'E5b'),
     'BDS': ('B1', 'B2', 'B3'),
     'SBAS': None,
     'QZSS': ('L1', 'L2', 'L5'),
@@ -238,8 +239,8 @@ CHANNEL_PREFERENCES = {
     },
     'Galileo': {
         'E1': ['X', 'Z', 'A', 'B', 'C'],
-        'E1a': ['X', 'Q', 'I'],
-        'E1b': ['X', 'Q', 'I'],
+        'E5a': ['X', 'Q', 'I'],
+        'E5b': ['X', 'Q', 'I'],
         'E5': ['X', 'Q', 'I'],
         'E6': ['X', 'Z', 'A', 'B', 'C'],
     },
