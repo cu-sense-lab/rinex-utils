@@ -412,12 +412,16 @@ def parse_RINEX3_obs_data(lines, system_obs_types):
             hour = parse_value(line[13:15], int)
             minute = parse_value(line[16:18], int)
             seconds = parse_value(line[19:29])
-            microseconds = int(1e6 * (seconds % 1))
-            seconds = int(seconds)
+            if isnan(seconds):
+                microseconds = nan
+            else:
+                microseconds = int(1e6 * (seconds % 1))
+                seconds = int(seconds)
             dt = datetime64(datetime(year, month, day, hour, minute, seconds, microseconds))
             time.append(dt)
             flag = parse_value(line[30:32], int)
             num_sats = parse_value(line[32:35], int)
+            # exception could happen here is `num_sats` parses to NaN -- need robust control over raising exception here.
             for i in range(num_sats):
                 line = next(lines)
                 sat_id = line[0:3]
@@ -540,6 +544,8 @@ def parse_RINEX3_obs_file(filepath):
     '''
     with open(filepath, 'r') as f:
         lines = list(f.readlines())
+    if len(lines) == 0:
+        raise Exception('Error when parsing RINEX 3 file.  The file appears to be empty.')
     for i, line in enumerate(lines):
         if line.find('END OF HEADER') >= 0:
             break
