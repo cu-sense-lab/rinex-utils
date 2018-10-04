@@ -1,6 +1,6 @@
 # %load /home/breitsbw/projects/utilities/rinex-utils/python/rinex_utils/rinex3.py
 import numpy
-from numpy import array, nan, datetime64, isnan
+from numpy import array, nan, datetime64, isnan, alltrue
 from datetime import datetime
 
 # RINEX 3.03
@@ -449,7 +449,7 @@ def parse_RINEX3_obs_data(lines, system_obs_types):
         pass
     return data, time
 
-def transform_values_from_RINEX3_obs(data, frequency_numbers=None):
+def transform_values_from_RINEX3_obs(data, frequency_numbers=None, convert_all_zero_to_nan=True):
     '''
     ------------------------------------------------------------
     Transforms output from `parse_RINEX3_obs_data` to more
@@ -466,6 +466,8 @@ def transform_values_from_RINEX3_obs(data, frequency_numbers=None):
         }
     `frequency_numbers` -- GLONASS frequency numbers obtained
         from RINEX header
+    `convert_all_zero_to_nan` (default True) -- if an array of
+        observations is all zero, sets values to nan
         
     Output:
     -------
@@ -494,7 +496,9 @@ def transform_values_from_RINEX3_obs(data, frequency_numbers=None):
                 new_data[sat_id]['index'] = array(data[sat_id]['index'], dtype=int)
                 continue
             val_arr = array(data[sat_id][obs_id])
-            if numpy.all(numpy.isnan(val_arr)):
+            if convert_all_zero_to_nan and alltrue(val_arr == 0):
+                val_arr[:] = nan
+            if alltrue(isnan(val_arr)):
                 continue
             obs_letter, obs_band, obs_channel = obs_id
             band = mapping[obs_band]['band']
@@ -513,7 +517,8 @@ def transform_values_from_RINEX3_obs(data, frequency_numbers=None):
             new_data[sat_id][band][obs_channel][obs_name] = array(data[sat_id][obs_id])
     return new_data
 
-def parse_RINEX3_obs_file(filepath):
+
+def parse_RINEX3_obs_file(filepath, all_zero_to_nan=True, trim_obs_tree=True):
     '''
     ------------------------------------------------------------
     Given the filepath to a RINEX observation file, parses and
@@ -522,6 +527,10 @@ def parse_RINEX3_obs_file(filepath):
     Input
     -----
     `filepath` -- filepath to RINEX observation file
+    `all_zero_to_nan` (default True) -- if an array of
+        observationsis is all zeros, converts the values to NaN
+    `trim_obs_tree` (default True) -- whether to remove channels
+        and signals where all observations are NaN
 
     Output
     ------
