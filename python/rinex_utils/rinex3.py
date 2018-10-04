@@ -1,6 +1,6 @@
 # %load /home/breitsbw/projects/utilities/rinex-utils/python/rinex_utils/rinex3.py
 import numpy
-from numpy import array, nan, datetime64
+from numpy import array, nan, datetime64, isnan
 from datetime import datetime
 
 # RINEX 3.03
