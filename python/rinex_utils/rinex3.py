@@ -362,9 +362,10 @@ def parse_RINEX3_header(lines):
                 num_sats = parse_value(line[0:4], int)
                 header['frequency_numbers'] = {}
                 while num_sats > 0:
-                    sat_ids_and_slots = line[4:60].split()
+                    sat_ids_and_slots = line[4:60]
                     for i in range(len(sat_ids_and_slots) // 2):
-                        sat_id, val_str = sat_ids_and_slots[2 * i], sat_ids_and_slots[2 * i + 1]
+                        sat_id = sat_ids_and_slots[7 * i:7 * i + 3].strip().replace(' ', '0')
+                        val_str = sat_ids_and_slots[7 * i + 3:7 * i + 7].strip()
                         header['frequency_numbers'][sat_id] = parse_value(val_str, int)
                     num_sats -= len(sat_ids_and_slots) // 2
                     line = next(lines)
@@ -424,7 +425,7 @@ def parse_RINEX3_obs_data(lines, system_obs_types):
             # exception could happen here is `num_sats` parses to NaN -- need robust control over raising exception here.
             for i in range(num_sats):
                 line = next(lines)
-                sat_id = line[0:3]
+                sat_id = line[0:3].replace(' ', '0')  # added; some really dumb writers use space instead of zero in sat ids, e.g. 'G 1'
                 system_letter = sat_id[0]
                 obs_types = system_obs_types[system_letter]
                 if sat_id not in data.keys():
