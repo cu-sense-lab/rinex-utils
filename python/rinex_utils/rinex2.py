@@ -266,11 +266,12 @@ def transform_values_from_RINEX2_obs(rinex_data):
     for sat_id, rnx_sat in rinex_data.items():
         if sat_id not in data.keys():
             data[sat_id] = {}
-        for obs_id, mapping in OBSERVATION_DATATYPES.items():
+        obs_datatypes = OBSERVATION_DATATYPES[CONSTELLATION_IDS[sat_id[0]]]
+        for obs_id, mapping in obs_datatypes.items():
             if obs_id in rnx_sat.keys():
                 sig_id = mapping['signal']
                 obs_name = mapping['name']
-                if signal not in sat.signals.keys():
+                if sig_id not in data[sat_id].keys():
                     data[sat_id][sig_id] = {}
                 data[sat_id][sig_id][obs_name] = array(rnx_sat[obs_id])
         if 'index' in rnx_sat.keys():
@@ -305,6 +306,8 @@ def parse_RINEX2_obs_file(filepath):
         }
         
     Note: `time` in `observations` is in GPST seconds
+    **Warning**: this function cannot currently handle splicing
+        / comments in the middle of a RINEX file.
     '''
     with open(filepath, 'r') as f:
         lines = list(f.readlines())
@@ -322,3 +325,4 @@ def parse_RINEX2_obs_file(filepath):
     time = (array(time) - gps_epoch).astype(float) / 1e6  # dt64 is in microseconds
     observations = {'time': time, 'satellites': obs_data}
     return header, observations
+
