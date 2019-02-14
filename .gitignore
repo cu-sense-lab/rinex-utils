@@ -6,3 +6,4 @@
 /data/
 /build/
 /.ipynb_checkpoints/
+notebooks/.ipynb_checkpoints/**

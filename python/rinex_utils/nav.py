@@ -1,19 +1,18 @@
 import re
 from datetime import datetime
 from numpy import datetime64
-from types import SimpleNamespace
 from .rinex2 import parse_RINEX2_header
 
 def parse_nav_data(lines, century=2000):
     '''
     Given filepath to RINEX Navigation file, parses navigation into ephemeris.
-    Returns dictionary {prn: [SimpleNamespace]} of ephemeris objects
+    Returns dictionary {prn: [{<eph>}]} of ephemeris dictionaris
     
     Output
     ------
     Dictionary of format:
-        {<prn>: <namespace>}
-    Each namespace contains the following parameters:
+        {<prn>: <dict>}
+    Each dict contains the following parameters:
         epoch - Python `datetime` object that is the epoch corresponding to the
             ephemeris -- this is also the "Time of Clock" (`t_oc`)
         e - eccentricity
@@ -51,7 +50,7 @@ def parse_nav_data(lines, century=2000):
             transmit_time, fit_interval = (float(s.replace('D', 'E')) for s in m[6:36])
         year = century + yy
         epoch = datetime64(datetime(year, month, day, hour, minute, int(second), int(1e6 * (second % 1))))
-        eph = SimpleNamespace(
+        eph = dict(
             epoch=epoch, a0=a0, a1=a1, a2=a2,
             iode1=iode1, c_rs=c_rs, delta_n=delta_n, m_0=m_0,
             c_uc=c_uc, e=e, c_us=c_us, sqrt_a=sqrt_a,
